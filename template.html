@@ -1,0 +1,600 @@
+<!doctype html>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>MX: открытый интерес</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series-inst:#2a78d6; --series-retail:#eb6834;
+    --series-inst-fill:rgba(42,120,214,0.12); --series-retail-fill:rgba(235,104,52,0.12);
+    --chip-bg:#f0efec; --chip-bg-active:#0b0b0b; --chip-fg-active:#fcfcfb;
+    --delta-up:#006300; --delta-down:#d03b3b; --flag-bg:rgba(208,59,59,0.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --surface-1:#1a1a19; --page:#0d0d0d;
+      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
+      --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --series-inst:#3987e5; --series-retail:#d95926;
+      --series-inst-fill:rgba(57,135,229,0.16); --series-retail-fill:rgba(217,89,38,0.16);
+      --chip-bg:#232320; --chip-bg-active:#ffffff; --chip-fg-active:#0b0b0b;
+      --delta-up:#0ca30c; --delta-down:#e66767; --flag-bg:rgba(230,103,103,0.12);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --series-inst:#3987e5; --series-retail:#d95926;
+    --series-inst-fill:rgba(57,135,229,0.16); --series-retail-fill:rgba(217,89,38,0.16);
+    --chip-bg:#232320; --chip-bg-active:#ffffff; --chip-fg-active:#0b0b0b;
+    --delta-up:#0ca30c; --delta-down:#e66767; --flag-bg:rgba(230,103,103,0.12);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding-block:24px;background:var(--page);color:var(--text-primary);
+       font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px}
+  .wrap{max-width:980px;margin:0 auto;padding-inline:16px}
+  .breadcrumb{color:var(--text-muted);font-size:12px;margin-bottom:6px}
+  .header-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:2px}
+  h1{font-size:20px;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);
+               border:1px solid var(--border);border-radius:999px;padding:3px 10px 3px 8px}
+  .status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);display:inline-block}
+  .sub{color:var(--text-secondary);margin:0 0 20px;font-size:13px}
+  .section-title{font-size:15px;font-weight:600;margin:28px 0 4px}
+  .section-desc{font-size:12px;color:var(--text-muted);margin:0 0 12px}
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;
+        padding:16px;margin-bottom:16px}
+  .filters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border:1px solid var(--border);background:var(--chip-bg);color:var(--text-primary);
+        border-radius:999px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+  .chip.active{background:var(--chip-bg-active);color:var(--chip-fg-active);border-color:transparent}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+  .stat{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .stat .lbl{color:var(--text-muted);font-size:12px;margin-bottom:4px}
+  .stat .val{font-size:20px;font-variant-numeric:tabular-nums;font-weight:600}
+  .stat .val.inst{color:var(--series-inst)}
+  .stat .val.retail{color:var(--series-retail)}
+  .stat .delta{font-size:12px;margin-top:4px;font-variant-numeric:tabular-nums}
+  .stat .delta.up{color:var(--delta-up)}
+  .stat .delta.down{color:var(--delta-down)}
+  .toprow{display:flex;justify-content:flex-end;margin-bottom:16px}
+  .chart-title{font-size:14px;font-weight:600;margin:0 0 2px}
+  .chart-desc{font-size:12px;color:var(--text-muted);margin:0 0 8px}
+  .legend{display:flex;gap:16px;margin-bottom:8px;font-size:12px;color:var(--text-secondary)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:14px;height:2px;border-radius:2px;display:inline-block}
+  .chart-box{position:relative}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .tooltip{position:absolute;pointer-events:none;background:var(--surface-1);border:1px solid var(--border);
+           border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.15);
+           opacity:0;transition:opacity .08s;white-space:nowrap;z-index:5}
+  .tooltip .d{color:var(--text-muted);margin-bottom:4px}
+  .tooltip .row{display:flex;align-items:center;gap:6px;margin-top:2px}
+  .tooltip .row .key{width:10px;height:2px;display:inline-block;border-radius:2px}
+  .tooltip .row b{font-variant-numeric:tabular-nums;margin-left:auto;padding-left:10px}
+  .crosshair{stroke:var(--baseline);stroke-width:1;pointer-events:none}
+  .zero-line{stroke:var(--baseline);stroke-width:1;stroke-dasharray:2,3}
+  .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .btn{border:1px solid var(--border);background:var(--chip-bg);color:var(--text-primary);
+       border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+  .table-wrap{max-height:360px;overflow:auto;border-top:1px solid var(--grid);margin-top:10px;display:none}
+  .table-wrap.open{display:block}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  th,td{padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  thead th{position:sticky;top:0;background:var(--surface-1);color:var(--text-muted);
+           font-weight:500;border-bottom:1px solid var(--grid)}
+  tbody tr:nth-child(even){background:rgba(128,128,128,0.05)}
+  tr.flag td{background:var(--flag-bg)}
+  td.delta.up{color:var(--delta-up)}
+  td.delta.down{color:var(--delta-down)}
+  td.grp{text-align:left;color:var(--text-secondary)}
+  .flag-note{font-size:11px;color:var(--text-muted)}
+  .threshold-note{font-size:12px;color:var(--text-muted);margin:0}
+  footer{color:var(--text-muted);font-size:12px;line-height:1.6;margin-top:8px}
+  footer a{color:inherit}
+
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--series-inst);
+           text-transform:uppercase;margin:0 0 4px}
+  .lp-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .lp-title{font-size:17px;font-weight:600;margin:0}
+  .lp-note{font-size:12px;color:var(--text-muted)}
+  .insights{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+  .insight{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border-radius:8px;font-size:13px;line-height:1.4}
+  .insight.info{background:rgba(42,120,214,0.08);color:var(--text-primary)}
+  .insight.warn{background:var(--flag-bg);color:var(--text-primary)}
+  .insight .ic{flex:none}
+  .lp-table th{text-align:right} .lp-table th:first-child{text-align:left}
+  .lp-table td.grpcell{font-weight:600}
+  .strategy-note{font-size:12px;color:var(--text-muted);font-style:italic;margin-top:12px}
+</style>
+<body>
+<div class="wrap">
+  <div class="breadcrumb">Инвестпривет · Позиционирование</div>
+  <div class="header-row">
+    <h1>MX — открытый интерес</h1>
+    <span class="status-pill" id="statusPill"><i class="dot"></i><span id="statusText">снимок</span></span>
+  </div>
+  <p class="sub" id="subhead">MOEX AlgoPack · FUTOI</p>
+  <p class="sub" style="margin-top:-14px">Обновляется автоматически раз в час · при необходимости обновить сейчас — напишите об этом в чате</p>
+
+  <div class="card">
+    <p class="eyebrow">Последняя точка</p>
+    <div class="lp-head">
+      <p class="lp-title">Изменение позиций в моменте</p>
+      <span class="lp-note" id="lpNote"></span>
+    </div>
+    <div class="insights" id="insights"></div>
+    <div style="overflow-x:auto">
+      <table class="lp-table">
+        <thead><tr>
+          <th style="text-align:left">Группа</th><th>Long</th><th>Δ Long</th><th>Short</th><th>Δ Short</th>
+          <th>Направленная позиция</th><th>Δ позиции</th>
+        </tr></thead>
+        <tbody id="lpBody"></tbody>
+      </table>
+    </div>
+    <p class="threshold-note" id="lpFootnote" style="margin-top:10px"></p>
+  </div>
+  <p class="strategy-note">Логика дашборда: розничные инвесторы (физлица) чаще ошибаются в направлении, поэтому решения ориентируются на то, как позиционируются юрлица.</p>
+
+  <div class="toprow">
+    <button class="btn" id="copyCsv">Скопировать как CSV</button>
+  </div>
+
+  <p class="section-title">Таблица изменений по дням</p>
+  <p class="section-desc" id="changesDesc"></p>
+  <div class="card">
+    <div class="table-wrap open" id="tableWrap" style="max-height:420px">
+      <table>
+        <thead><tr>
+          <th style="text-align:left">Дата</th><th style="text-align:left">Группа</th>
+          <th>Лонг</th><th>Шорт</th><th>Нетто</th><th>Δ к пред. дню</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="toolbar" style="margin-top:10px;margin-bottom:0">
+      <p class="threshold-note">Подсвечены дни, где |Δ нетто| ≥ <span id="thresholdLbl"></span> контрактов день к дню</p>
+      <button class="btn" id="moreRows">Показать больше</button>
+    </div>
+  </div>
+
+  <p class="section-title">Исторические графики</p>
+  <div class="filters">
+    <div class="chips" id="rangeChips"></div>
+  </div>
+
+  <div class="card">
+    <p class="chart-title">Открытый интерес: институционалы vs частные инвесторы</p>
+    <p class="chart-desc">Суммарные длинные + короткие позиции на конец дня, по группе клиентов</p>
+    <div class="legend">
+      <span><i style="background:var(--series-inst)"></i>Институционалы (юрлица)</span>
+      <span><i style="background:var(--series-retail)"></i>Частные инвесторы (физлица)</span>
+    </div>
+    <div class="chart-box" id="chart1box"></div>
+  </div>
+
+  <div class="card">
+    <p class="chart-title">Чистая позиция (лонг минус шорт)</p>
+    <p class="chart-desc">Выше нуля — группа в сумме держит лонг, ниже нуля — в сумме шорт</p>
+    <div class="legend">
+      <span><i style="background:var(--series-inst)"></i>Институционалы</span>
+      <span><i style="background:var(--series-retail)"></i>Частные инвесторы</span>
+    </div>
+    <div class="chart-box" id="chart2box"></div>
+  </div>
+
+  <footer>
+    Источник: MOEX AlgoPack, эндпойнт FUTOI (открытый интерес по срочному рынку), тикер MX.
+    Снимок собран __SNAPSHOT_DATE__, покрывает торговые дни с __MIN_DATE__ по __MAX_DATE__.
+    Плоские участки конца февраля – марта 2022 отражают приостановку торгов на срочном рынке Мосбиржи, а не пропуск в данных.
+    Для новых дней дашборд нужно пересобрать по свежей выгрузке.
+  </footer>
+</div>
+
+<script>
+const RAW = __DATA_JSON__;
+const LAST_POINT = __LAST_POINT_JSON__;
+const THRESHOLD = 10000;
+// [tradedate, oi_fiz_long, oi_fiz_short, net_fiz, oi_yur_long, oi_yur_short, net_yur]
+const DATA = RAW.map((r, i) => {
+  const prev = RAW[i-1];
+  return {
+    date: r[0],
+    fizLong: r[1], fizShort: r[2], fizNet: r[3],
+    yurLong: r[4], yurShort: r[5], yurNet: r[6],
+    fizTotal: r[1] + r[2],
+    yurTotal: r[4] + r[5],
+    fizNetDelta: prev ? r[3] - prev[3] : null,
+    yurNetDelta: prev ? r[6] - prev[6] : null,
+  };
+});
+
+const RANGES = [
+  {key:'1M', label:'1М', days:22},
+  {key:'3M', label:'3М', days:66},
+  {key:'1Y', label:'1Г', days:252},
+  {key:'3Y', label:'3Г', days:756},
+  {key:'MAX', label:'MAX', days:Infinity},
+];
+let currentRangeKey = '1Y';
+
+function fmtInt(n){ return Math.round(n).toLocaleString('ru-RU'); }
+function fmtSigned(n){ const s = Math.round(n).toLocaleString('ru-RU'); return n>0?'+'+s:s; }
+function fmtDateShort(iso){
+  const [y,m,d] = iso.split('-');
+  return d+'.'+m+'.'+y.slice(2);
+}
+function fmtDateLong(iso){
+  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  const [y,m,d] = iso.split('-');
+  return parseInt(d,10)+' '+months[parseInt(m,10)-1]+' '+y;
+}
+
+function currentSlice(){
+  const r = RANGES.find(r=>r.key===currentRangeKey);
+  if (r.days === Infinity) return DATA;
+  return DATA.slice(Math.max(0, DATA.length - r.days));
+}
+
+const TODAY_ROW = (function(){
+  const f = LAST_POINT.groups.FIZ, y = LAST_POINT.groups.YUR;
+  return {
+    date: LAST_POINT.tradedate,
+    fizLong: f.long, fizShort: f.short, fizNet: f.net,
+    yurLong: y.long, yurShort: y.short, yurNet: y.net,
+    fizTotal: f.long + f.short, yurTotal: y.long + y.short,
+    isLive: true,
+  };
+})();
+
+function chartSlice(){
+  return [...currentSlice(), TODAY_ROW];
+}
+
+function renderChips(){
+  const el = document.getElementById('rangeChips');
+  el.innerHTML = '';
+  RANGES.forEach(r=>{
+    const b = document.createElement('button');
+    b.className = 'chip' + (r.key===currentRangeKey ? ' active':'');
+    b.textContent = r.label;
+    b.addEventListener('click', ()=>{ currentRangeKey = r.key; renderAll(); });
+    el.appendChild(b);
+  });
+}
+
+function deltaHtml(delta){
+  if (delta === null || delta === undefined) return '';
+  const dir = delta > 0 ? 'up' : (delta < 0 ? 'down' : '');
+  const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '—');
+  return `<div class="delta ${dir}">${arrow} ${fmtInt(Math.abs(delta))} за день</div>`;
+}
+
+function deltaCell(delta){
+  const dir = delta > 0 ? 'up' : (delta < 0 ? 'down' : '');
+  return `<td class="delta ${dir}">${fmtSigned(delta)}</td>`;
+}
+
+function renderLastPoint(){
+  const prevDay = DATA[DATA.length-1]; // последний закрытый торговый день из бэкфилла
+  document.getElementById('lpNote').textContent = `к предыдущему дню (${fmtDateShort(prevDay.date)}) · контрактов`;
+  document.getElementById('lpFootnote').textContent =
+    `Направленная позиция = Long − Short. Порог заметного изменения: ±${THRESHOLD.toLocaleString('ru-RU')} контрактов к предыдущему дню.`;
+  document.getElementById('statusText').textContent =
+    `${LAST_POINT.tradedate.split('-').reverse().join('.')} ${LAST_POINT.last_time.slice(0,5)}, live`;
+  document.querySelector('#statusPill .dot').style.background = 'var(--delta-up)';
+
+  const rows = [
+    {label:'Физические лица', g: LAST_POINT.groups.FIZ, pLong: prevDay.fizLong, pShort: prevDay.fizShort, pNet: prevDay.fizNet},
+    {label:'Юридические лица', g: LAST_POINT.groups.YUR, pLong: prevDay.yurLong, pShort: prevDay.yurShort, pNet: prevDay.yurNet},
+  ];
+  const tbody = document.getElementById('lpBody');
+  tbody.innerHTML = rows.map(r=>{
+    const g = r.g;
+    const dLong = g.long - r.pLong, dShort = g.short - r.pShort, dNet = g.net - r.pNet;
+    return `<tr>
+      <td class="grpcell">${r.label}</td>
+      <td>${fmtInt(g.long)}</td>${deltaCell(dLong)}
+      <td>${fmtInt(g.short)}</td>${deltaCell(dShort)}
+      <td class="grpcell">${fmtSigned(g.net)}</td>${deltaCell(dNet)}
+    </tr>`;
+  }).join('');
+
+  // insights
+  const fiz = LAST_POINT.groups.FIZ, yur = LAST_POINT.groups.YUR;
+  const dFizNet = fiz.net - prevDay.fizNet, dYurNet = yur.net - prevDay.yurNet;
+  const insights = [];
+  if (fiz.net < 0){
+    insights.push({type:'info', icon:'▼', text:
+      `Физические лица держат больше коротких позиций, чем длинных: направленная позиция ${fmtSigned(fiz.net)} — в сумме розница в шорте.`});
+  } else if (fiz.net > 0) {
+    insights.push({type:'info', icon:'▲', text:
+      `Физические лица держат больше длинных позиций, чем коротких: направленная позиция ${fmtSigned(fiz.net)} — в сумме розница в лонге.`});
+  }
+  [{label:'физлиц', d:dFizNet},{label:'юрлиц', d:dYurNet}].forEach(({label,d})=>{
+    if (Math.abs(d) >= THRESHOLD){
+      insights.push({type:'warn', icon:'⚠', text:
+        `Резкое изменение к предыдущему дню: направленная позиция ${label} сдвинулась на ${fmtSigned(d)} контрактов — возможен разворот, стоит присмотреться.`});
+    }
+  });
+  document.getElementById('insights').innerHTML = insights.map(i=>
+    `<div class="insight ${i.type}"><span class="ic">${i.icon}</span><span>${i.text}</span></div>`
+  ).join('');
+
+  document.getElementById('thresholdLbl').textContent = THRESHOLD.toLocaleString('ru-RU');
+}
+
+function makeChart(container, slice, series, opts){
+  container.innerHTML = '';
+  const width = 900, height = 220, margin = {top:10,right:14,bottom:24,left:56};
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+  const n = slice.length;
+
+  let vals = [];
+  series.forEach(s => slice.forEach(d => vals.push(d[s.key])));
+  let yMin = Math.min(...vals), yMax = Math.max(...vals);
+  if (opts.symmetric){
+    const m = Math.max(Math.abs(yMin), Math.abs(yMax)) * 1.1 || 1;
+    yMin = -m; yMax = m;
+  } else {
+    const pad = (yMax-yMin)*0.08 || 1;
+    yMin = Math.max(0, yMin-pad); yMax = yMax+pad;
+  }
+
+  const x = i => margin.left + (n<=1 ? 0 : i/(n-1)*innerW);
+  const y = v => margin.top + innerH - (v-yMin)/(yMax-yMin)*innerH;
+
+  const svgns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgns,'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  // gridlines (4 horizontal)
+  const gridCount = 4;
+  for (let g=0; g<=gridCount; g++){
+    const v = yMin + (yMax-yMin)*g/gridCount;
+    const gy = y(v);
+    const line = document.createElementNS(svgns,'line');
+    line.setAttribute('x1', margin.left); line.setAttribute('x2', width-margin.right);
+    line.setAttribute('y1', gy); line.setAttribute('y2', gy);
+    line.setAttribute('stroke', 'var(--grid)'); line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+    const label = document.createElementNS(svgns,'text');
+    label.setAttribute('x', margin.left-8); label.setAttribute('y', gy+3);
+    label.setAttribute('text-anchor','end'); label.setAttribute('font-size','10');
+    label.setAttribute('fill','var(--text-muted)');
+    label.textContent = (Math.abs(v)>=1000? Math.round(v/1000)+'k' : Math.round(v));
+    svg.appendChild(label);
+  }
+
+  if (opts.symmetric){
+    const zy = y(0);
+    const zline = document.createElementNS(svgns,'line');
+    zline.setAttribute('class','zero-line');
+    zline.setAttribute('x1', margin.left); zline.setAttribute('x2', width-margin.right);
+    zline.setAttribute('y1', zy); zline.setAttribute('y2', zy);
+    svg.appendChild(zline);
+  }
+
+  // x-axis date labels (start, mid, end)
+  [0, Math.floor((n-1)/2), n-1].forEach(i=>{
+    if (i<0 || i>=n) return;
+    const label = document.createElementNS(svgns,'text');
+    label.setAttribute('x', x(i)); label.setAttribute('y', height-6);
+    label.setAttribute('text-anchor', i===0?'start':(i===n-1?'end':'middle'));
+    label.setAttribute('font-size','10'); label.setAttribute('fill','var(--text-muted)');
+    label.textContent = fmtDateShort(slice[i].date);
+    svg.appendChild(label);
+  });
+
+  // lines
+  const liveIdx = n>0 && slice[n-1].isLive ? n-1 : -1;
+  const mainEnd = liveIdx>=0 ? liveIdx-1 : n-1;
+  series.forEach(s=>{
+    let d = '';
+    for (let i=0; i<=mainEnd; i++){
+      d += `${i===0?'M':'L'}${x(i).toFixed(1)},${y(slice[i][s.key]).toFixed(1)} `;
+    }
+    const path = document.createElementNS(svgns,'path');
+    path.setAttribute('d', d.trim());
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke', s.color);
+    path.setAttribute('stroke-width','2');
+    path.setAttribute('stroke-linejoin','round');
+    svg.appendChild(path);
+
+    if (liveIdx>=0 && mainEnd>=0){
+      const path2 = document.createElementNS(svgns,'path');
+      path2.setAttribute('d', `M${x(mainEnd).toFixed(1)},${y(slice[mainEnd][s.key]).toFixed(1)} L${x(liveIdx).toFixed(1)},${y(slice[liveIdx][s.key]).toFixed(1)}`);
+      path2.setAttribute('fill','none');
+      path2.setAttribute('stroke', s.color);
+      path2.setAttribute('stroke-width','2');
+      path2.setAttribute('stroke-dasharray','4,3');
+      svg.appendChild(path2);
+
+      const marker = document.createElementNS(svgns,'circle');
+      marker.setAttribute('cx', x(liveIdx)); marker.setAttribute('cy', y(slice[liveIdx][s.key]));
+      marker.setAttribute('r','4');
+      marker.setAttribute('fill', s.color);
+      marker.setAttribute('stroke', 'var(--surface-1)');
+      marker.setAttribute('stroke-width','1.5');
+      svg.appendChild(marker);
+    }
+  });
+
+  if (liveIdx>=0){
+    const lbl = document.createElementNS(svgns,'text');
+    lbl.setAttribute('x', Math.min(x(liveIdx), width-margin.right-30));
+    lbl.setAttribute('y', margin.top+8);
+    lbl.setAttribute('text-anchor','end');
+    lbl.setAttribute('font-size','9'); lbl.setAttribute('fill','var(--text-muted)');
+    lbl.textContent = 'сейчас (live)';
+    svg.appendChild(lbl);
+  }
+
+  // crosshair group
+  const crosshair = document.createElementNS(svgns,'line');
+  crosshair.setAttribute('class','crosshair');
+  crosshair.setAttribute('y1', margin.top); crosshair.setAttribute('y2', margin.top+innerH);
+  crosshair.setAttribute('opacity','0');
+  svg.appendChild(crosshair);
+
+  const dots = series.map(s=>{
+    const c = document.createElementNS(svgns,'circle');
+    c.setAttribute('r','3.5'); c.setAttribute('fill', s.color);
+    c.setAttribute('stroke', 'var(--surface-1)'); c.setAttribute('stroke-width','1.5');
+    c.setAttribute('opacity','0');
+    svg.appendChild(c);
+    return c;
+  });
+
+  container.appendChild(svg);
+
+  // tooltip
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tooltip';
+  container.style.position = 'relative';
+  container.appendChild(tooltip);
+
+  const hitRect = document.createElementNS(svgns,'rect');
+  hitRect.setAttribute('x', margin.left); hitRect.setAttribute('y', margin.top);
+  hitRect.setAttribute('width', innerW); hitRect.setAttribute('height', innerH);
+  hitRect.setAttribute('fill','transparent');
+  svg.appendChild(hitRect);
+
+  function onMove(evt){
+    const rect = svg.getBoundingClientRect();
+    const px = (evt.clientX - rect.left) / rect.width * width;
+    let i = Math.round((px - margin.left) / innerW * (n-1));
+    i = Math.max(0, Math.min(n-1, i));
+    const row = slice[i];
+    crosshair.setAttribute('x1', x(i)); crosshair.setAttribute('x2', x(i));
+    crosshair.setAttribute('opacity','1');
+    dots.forEach((dot,k)=>{
+      dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(row[series[k].key]));
+      dot.setAttribute('opacity','1');
+    });
+    tooltip.innerHTML = '';
+    const dEl = document.createElement('div'); dEl.className='d';
+    dEl.textContent = fmtDateLong(row.date) + (row.isLive ? ' · в моменте (live)' : '');
+    tooltip.appendChild(dEl);
+    series.forEach(s=>{
+      const r = document.createElement('div'); r.className='row';
+      const key = document.createElement('span'); key.className='key'; key.style.background = s.color;
+      const name = document.createElement('span'); name.textContent = s.label;
+      const val = document.createElement('b'); val.textContent = (row[s.key]>0&&opts.symmetric?'+':'') + fmtInt(row[s.key]);
+      r.appendChild(key); r.appendChild(name); r.appendChild(val);
+      tooltip.appendChild(r);
+    });
+    tooltip.style.opacity = '1';
+    let left = (x(i)/width*100) + '%';
+    tooltip.style.left = left;
+    tooltip.style.top = '0px';
+    tooltip.style.transform = `translate(${x(i) > width*0.6 ? '-105%' : '10px'}, 0)`;
+  }
+  function onLeave(){
+    crosshair.setAttribute('opacity','0');
+    dots.forEach(d=>d.setAttribute('opacity','0'));
+    tooltip.style.opacity = '0';
+  }
+  svg.addEventListener('pointermove', onMove);
+  svg.addEventListener('pointerleave', onLeave);
+}
+
+function renderCharts(){
+  const slice = chartSlice();
+  makeChart(document.getElementById('chart1box'), slice, [
+    {key:'yurTotal', color:'var(--series-inst)'.trim() ? getVar('--series-inst') : '#2a78d6', label:'Институционалы'},
+    {key:'fizTotal', color: getVar('--series-retail'), label:'Частные инвесторы'},
+  ], {symmetric:false});
+  makeChart(document.getElementById('chart2box'), slice, [
+    {key:'yurNet', color: getVar('--series-inst'), label:'Институционалы'},
+    {key:'fizNet', color: getVar('--series-retail'), label:'Частные инвесторы'},
+  ], {symmetric:true});
+}
+function getVar(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+let changesDatesShown = 20;
+
+function addRow(tbody, r, group, longV, shortV, netV, deltaV, color){
+  const tr = document.createElement('tr');
+  const flagged = deltaV !== null && Math.abs(deltaV) >= THRESHOLD;
+  if (flagged) tr.classList.add('flag');
+  const dateTd = document.createElement('td');
+  dateTd.textContent = fmtDateShort(r.date);
+  tr.appendChild(dateTd);
+  const grpTd = document.createElement('td');
+  grpTd.className = 'grp';
+  grpTd.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px"><i style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block"></i>${group}</span>`;
+  tr.appendChild(grpTd);
+  [fmtInt(longV), fmtInt(shortV), fmtSigned(netV)].forEach(v=>{
+    const td = document.createElement('td');
+    td.textContent = v;
+    tr.appendChild(td);
+  });
+  const deltaTd = document.createElement('td');
+  deltaTd.className = 'delta ' + (deltaV>0?'up':(deltaV<0?'down':''));
+  deltaTd.textContent = deltaV===null ? '—' : fmtSigned(deltaV);
+  tr.appendChild(deltaTd);
+  tbody.appendChild(tr);
+}
+
+function renderChangesTable(){
+  const n = Math.min(changesDatesShown, DATA.length);
+  const rows = DATA.slice(DATA.length - n).reverse();
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  rows.forEach(r=>{
+    addRow(tbody, r, 'Розница', r.fizLong, r.fizShort, r.fizNet, r.fizNetDelta, getVar('--series-retail'));
+    addRow(tbody, r, 'Институционалы', r.yurLong, r.yurShort, r.yurNet, r.yurNetDelta, getVar('--series-inst'));
+  });
+  document.getElementById('changesDesc').textContent =
+    `Последние ${n} торговых дней · показаны отдельно по частным и институциональным инвесторам`;
+  document.getElementById('moreRows').style.display = n >= DATA.length ? 'none' : '';
+}
+
+document.getElementById('moreRows').addEventListener('click', ()=>{
+  changesDatesShown = Math.min(changesDatesShown + 20, DATA.length);
+  renderChangesTable();
+});
+
+function renderAll(){
+  renderChips();
+  renderLastPoint();
+  renderCharts();
+  renderChangesTable();
+}
+
+document.getElementById('copyCsv').addEventListener('click', async (e)=>{
+  const slice = currentSlice();
+  const header = 'date,institutional_long,institutional_short,institutional_net,retail_long,retail_short,retail_net';
+  const lines = [header, ...slice.map(r=>[r.date,r.yurLong,r.yurShort,r.yurNet,r.fizLong,r.fizShort,r.fizNet].join(','))];
+  const csv = lines.join('\n');
+  try{
+    await navigator.clipboard.writeText(csv);
+    const old = e.target.textContent;
+    e.target.textContent = 'Скопировано!';
+    setTimeout(()=> e.target.textContent = old, 1500);
+  }catch(err){
+    const ta = document.createElement('textarea');
+    ta.value = csv; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e2){}
+    document.body.removeChild(ta);
+  }
+});
+
+document.getElementById('subhead').textContent =
+  `MOEX AlgoPack · FUTOI · ${DATA.length.toLocaleString('ru-RU')} торговых дней · ${fmtDateLong(DATA[0].date)} — ${fmtDateLong(DATA[DATA.length-1].date)}`;
+
+renderAll();
+</script>
