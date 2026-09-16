@@ -9,13 +9,17 @@
    тот же метод, что и в рабочем скрипте fetch_futoi_history.py).
 2. Если сегодня новый торговый день по сравнению с тем, что лежит в
    data/futoi_MX_live.csv — переносим последний снимок ПРЕДЫДУЩЕГО дня в
-   data/data.json (историю по дням) и начинаем live-файл заново.
+   data/data.json (историю по дням), фиксируем официальное закрытие индекса
+   IMOEX за этот же прошедший день в data/price_daily.json, и начинаем
+   live-файл заново.
 3. Иначе — дописываем новые строки в data/futoi_MX_live.csv (дедуп по всем полям,
    как в живом сборщике на компьютере).
 4. Если данных нет вообще (выходной, ночь, перерыв) — тихо выходим без изменений.
-5. Считаем LAST_POINT (две последние 5-минутные точки) и пересобираем index.html
-   из template.html + data/data.json + last_point.
-6. Дальше это в workflow: git add/commit/push, если что-то изменилось.
+5. Забираем ТЕКУЩЕЕ значение индекса IMOEX (бесплатный ISS API MOEX, без токена)
+   и кладём его в LAST_POINT как "живую" цену.
+6. Считаем LAST_POINT (две последние 5-минутные точки) и пересобираем index.html
+   из template.html + data/data.json + data/price_daily.json + last_point.
+7. Дальше это в workflow: git add/commit/push, если что-то изменилось.
 """
 
 import json
@@ -38,10 +42,15 @@ BASE_URL = f"https://apim.moex.com/iss/analyticalproducts/futoi/securities/{TICK
 PAGE_SIZE = 1000
 MAX_RETRIES = 5
 
+IMOEX_LIVE_URL = "https://iss.moex.com/iss/engines/stock/markets/index/securities/IMOEX.json"
+IMOEX_HISTORY_URL = ("https://iss.moex.com/iss/history/engines/stock/markets/index/"
+                      "boards/SNDX/securities/IMOEX.json")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data")
 LIVE_CSV = os.path.join(DATA_DIR, f"futoi_{TICKER}_live.csv")
 DATA_JSON = os.path.join(DATA_DIR, "data.json")
+PRICE_JSON = os.path.join(DATA_DIR, "price_daily.json")
 TEMPLATE_HTML = os.path.join(ROOT, "template.html")
 OUTPUT_HTML = os.path.join(ROOT, "index.html")
 
@@ -173,6 +182,74 @@ def finalize_day_into_history(df_old_day):
     print(f"Добавил {old_day} в историю (data/data.json). Всего дней: {len(history)}")
 
 
+def fetch_imoex_live(session):
+    """Текущее значение индекса IMOEX. Бесплатный ISS API, токен не нужен.
+    Возвращает число или None, если не получилось."""
+    try:
+        resp = session.get(IMOEX_LIVE_URL, timeout=15)
+        if resp.status_code != 200:
+            print(f"IMOEX live: неожиданный статус {resp.status_code}")
+            return None
+        payload = resp.json()
+        md = payload.get("marketdata", {})
+        cols = md.get("columns", [])
+        rows = md.get("data", [])
+        if not rows or "LASTVALUE" not in cols:
+            return None
+        val = rows[0][cols.index("LASTVALUE")]
+        return float(val) if val is not None else None
+    except Exception as e:
+        print(f"Не удалось получить текущее значение IMOEX: {e}")
+        return None
+
+
+def fetch_imoex_close_for_date(session, day_str):
+    """Официальное закрытие индекса IMOEX за конкретный прошедший день
+    (для точной фиксации в истории при смене торгового дня)."""
+    try:
+        resp = session.get(IMOEX_HISTORY_URL, params={"from": day_str, "till": day_str}, timeout=15)
+        if resp.status_code != 200:
+            print(f"IMOEX history {day_str}: неожиданный статус {resp.status_code}")
+            return None
+        payload = resp.json()
+        block = payload.get("history", {})
+        cols = block.get("columns", [])
+        rows = block.get("data", [])
+        if not rows or "CLOSE" not in cols:
+            return None
+        val = rows[0][cols.index("CLOSE")]
+        return float(val) if val is not None else None
+    except Exception as e:
+        print(f"Не удалось получить закрытие IMOEX за {day_str}: {e}")
+        return None
+
+
+def load_price_history():
+    if os.path.exists(PRICE_JSON):
+        try:
+            with open(PRICE_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Не смог прочитать {PRICE_JSON}: {e}")
+    return []
+
+
+def append_price_history(day_str, close_value):
+    if close_value is None:
+        print(f"Нет закрытия IMOEX за {day_str} — история цены не пополнена за этот день.")
+        return
+    history = load_price_history()
+    if history and history[-1][0] == day_str:
+        print(f"{day_str} уже есть в data/price_daily.json, пропускаю дублирование.")
+        return
+    history.append([day_str, close_value])
+    history.sort(key=lambda row: row[0])
+    with open(PRICE_JSON, "w", encoding="utf-8") as f:
+        json.dump(history, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"Добавил цену закрытия IMOEX за {day_str} ({close_value}) в data/price_daily.json. "
+          f"Всего дней: {len(history)}")
+
+
 def compute_last_point(df):
     """Две последние 5-минутные точки (дедуп по tradetime+clgroup) -> LAST_POINT dict."""
     df = df.drop_duplicates(subset=["tradetime", "clgroup"], keep="last").copy()
@@ -217,8 +294,12 @@ def rebuild_html(last_point):
         tpl = f.read()
     with open(DATA_JSON, "r", encoding="utf-8") as f:
         data_json = f.read()
+    price_history = load_price_history()
+    price_json = json.dumps(price_history, ensure_ascii=False)
     last_point_json = json.dumps(last_point, ensure_ascii=False)
-    out = tpl.replace("__DATA_JSON__", data_json.strip()).replace("__LAST_POINT_JSON__", last_point_json)
+    out = (tpl.replace("__DATA_JSON__", data_json.strip())
+              .replace("__PRICE_JSON__", price_json)
+              .replace("__LAST_POINT_JSON__", last_point_json))
     with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
         f.write(out)
     print(f"Пересобрал {OUTPUT_HTML}")
@@ -245,6 +326,8 @@ def main():
         if old_day != today_str:
             print(f"Новый торговый день: {old_day} -> {today_str}. Переношу {old_day} в историю.")
             finalize_day_into_history(df_existing)
+            close_price = fetch_imoex_close_for_date(session, old_day)
+            append_price_history(old_day, close_price)
             df_existing = pd.DataFrame()  # начинаем live-файл заново
 
     df_all = df_new if df_existing.empty else pd.concat([df_existing, df_new], ignore_index=True)
@@ -258,6 +341,13 @@ def main():
     if last_point is None:
         print("Не удалось посчитать LAST_POINT (пустые данные), выхожу.")
         return
+
+    live_price = fetch_imoex_live(session)
+    if live_price is not None:
+        last_point["price"] = live_price
+        print(f"Текущее значение IMOEX: {live_price}")
+    else:
+        print("Не удалось получить текущее значение IMOEX в этот раз — цена на дашборде не обновится.")
 
     rebuild_html(last_point)
 
