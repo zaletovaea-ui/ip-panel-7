@@ -113,6 +113,10 @@
   .lp-table th{text-align:right} .lp-table th:first-child{text-align:left}
   .lp-table td.grpcell{font-weight:600}
   .strategy-note{font-size:12px;color:var(--text-muted);font-style:italic;margin-top:12px}
+  .learn-links{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 20px}
+  .btn-link{display:inline-block;background:var(--series-inst);color:#ffffff;
+            border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;
+            text-decoration:none;font-family:inherit}
 </style>
 <body>
 <div class="wrap">
@@ -122,7 +126,7 @@
     <span class="status-pill" id="statusPill"><i class="dot"></i><span id="statusText">снимок</span></span>
   </div>
   <p class="sub" id="subhead">MOEX AlgoPack · FUTOI</p>
-  <p class="sub" style="margin-top:-14px">Обновляется автоматически раз в час · при необходимости обновить сейчас — напишите об этом в чате</p>
+  <p class="sub" style="margin-top:-14px">Обновляется автоматически, обычно раз в 5–15 минут</p>
 
   <div class="card">
     <p class="eyebrow">Последняя точка</p>
@@ -143,6 +147,37 @@
     <p class="threshold-note" id="lpFootnote" style="margin-top:10px"></p>
   </div>
   <p class="strategy-note">Логика дашборда: розничные инвесторы (физлица) чаще ошибаются в направлении, поэтому решения ориентируются на то, как позиционируются юрлица.</p>
+
+  <p class="section-title">Исторические графики</p>
+  <div class="filters">
+    <div class="chips" id="rangeChips"></div>
+  </div>
+
+  <div class="card">
+    <p class="chart-title">Чистая позиция (лонг минус шорт)</p>
+    <p class="chart-desc">Выше нуля — группа в сумме держит лонг, ниже нуля — в сумме шорт</p>
+    <div class="legend">
+      <span><i style="background:var(--series-inst)"></i>Институционалы</span>
+      <span><i style="background:var(--series-retail)"></i>Частные инвесторы</span>
+    </div>
+    <div class="chart-box" id="chart2box"></div>
+  </div>
+
+  <div class="card">
+    <p class="chart-title">Индекс МосБиржи (IMOEX)</p>
+    <p class="chart-desc">Закрытие дня; сегодняшняя точка — текущее значение индекса, обновляется вместе с остальным дашбордом</p>
+    <div class="chart-box" id="chart0box"></div>
+  </div>
+
+  <div class="card">
+    <p class="chart-title">Открытый интерес: институционалы vs частные инвесторы</p>
+    <p class="chart-desc">Суммарные длинные + короткие позиции на конец дня, по группе клиентов</p>
+    <div class="legend">
+      <span><i style="background:var(--series-inst)"></i>Институционалы (юрлица)</span>
+      <span><i style="background:var(--series-retail)"></i>Частные инвесторы (физлица)</span>
+    </div>
+    <div class="chart-box" id="chart1box"></div>
+  </div>
 
   <div class="toprow">
     <button class="btn" id="copyCsv">Скопировать как CSV</button>
@@ -166,29 +201,10 @@
     </div>
   </div>
 
-  <p class="section-title">Исторические графики</p>
-  <div class="filters">
-    <div class="chips" id="rangeChips"></div>
-  </div>
-
-  <div class="card">
-    <p class="chart-title">Открытый интерес: институционалы vs частные инвесторы</p>
-    <p class="chart-desc">Суммарные длинные + короткие позиции на конец дня, по группе клиентов</p>
-    <div class="legend">
-      <span><i style="background:var(--series-inst)"></i>Институционалы (юрлица)</span>
-      <span><i style="background:var(--series-retail)"></i>Частные инвесторы (физлица)</span>
-    </div>
-    <div class="chart-box" id="chart1box"></div>
-  </div>
-
-  <div class="card">
-    <p class="chart-title">Чистая позиция (лонг минус шорт)</p>
-    <p class="chart-desc">Выше нуля — группа в сумме держит лонг, ниже нуля — в сумме шорт</p>
-    <div class="legend">
-      <span><i style="background:var(--series-inst)"></i>Институционалы</span>
-      <span><i style="background:var(--series-retail)"></i>Частные инвесторы</span>
-    </div>
-    <div class="chart-box" id="chart2box"></div>
+  <p class="section-title">Обучающие материалы по открытому интересу в Клубе</p>
+  <div class="learn-links">
+    <a class="btn-link" href="https://investprivet.ru/pl/teach/control/lesson/view?id=336390715&editMode=0" target="_blank" rel="noopener">Смотреть урок про ОИ (база)</a>
+    <a class="btn-link" href="https://investprivet.ru/pl/teach/control/lesson/view?id=343842201&editMode=0" target="_blank" rel="noopener">Смотреть урок «Действуй как инсайдер»</a>
   </div>
 
   <footer>
@@ -202,7 +218,9 @@
 <script>
 const RAW = __DATA_JSON__;
 const LAST_POINT = __LAST_POINT_JSON__;
+const PRICE_RAW = __PRICE_JSON__; // [[date, close], ...] — индекс IMOEX, закрытие дня
 const THRESHOLD = 10000;
+const PRICE_MAP = new Map(PRICE_RAW.map(([d,c]) => [d,c]));
 // [tradedate, oi_fiz_long, oi_fiz_short, net_fiz, oi_yur_long, oi_yur_short, net_yur]
 const DATA = RAW.map((r, i) => {
   const prev = RAW[i-1];
@@ -214,10 +232,16 @@ const DATA = RAW.map((r, i) => {
     yurTotal: r[4] + r[5],
     fizNetDelta: prev ? r[3] - prev[3] : null,
     yurNetDelta: prev ? r[6] - prev[6] : null,
+    price: PRICE_MAP.has(r[0]) ? PRICE_MAP.get(r[0]) : null,
   };
 });
+// текущее значение индекса: если сегодняшний живой опрос уже дал число — берём его,
+// иначе (например, самый первый запуск после установки) — последнее известное закрытие
+const LAST_PRICE = (LAST_POINT.price != null) ? LAST_POINT.price
+  : (PRICE_RAW.length ? PRICE_RAW[PRICE_RAW.length-1][1] : null);
 
 const RANGES = [
+  {key:'1W', label:'1Н', days:5},
   {key:'1M', label:'1М', days:22},
   {key:'3M', label:'3М', days:66},
   {key:'1Y', label:'1Г', days:252},
@@ -252,6 +276,7 @@ const TODAY_ROW = (function(){
     yurLong: y.long, yurShort: y.short, yurNet: y.net,
     fizTotal: f.long + f.short, yurTotal: y.long + y.short,
     isLive: true,
+    price: LAST_PRICE,
   };
 })();
 
@@ -340,7 +365,11 @@ function makeChart(container, slice, series, opts){
   const n = slice.length;
 
   let vals = [];
-  series.forEach(s => slice.forEach(d => vals.push(d[s.key])));
+  series.forEach(s => slice.forEach(d => { if (d[s.key] != null) vals.push(d[s.key]); }));
+  if (!vals.length){
+    container.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text-muted)">Нет данных за этот период</div>';
+    return;
+  }
   let yMin = Math.min(...vals), yMax = Math.max(...vals);
   if (opts.symmetric){
     const m = Math.max(Math.abs(yMin), Math.abs(yMax)) * 1.1 || 1;
@@ -371,7 +400,7 @@ function makeChart(container, slice, series, opts){
     label.setAttribute('x', margin.left-8); label.setAttribute('y', gy+3);
     label.setAttribute('text-anchor','end'); label.setAttribute('font-size','10');
     label.setAttribute('fill','var(--text-muted)');
-    label.textContent = (Math.abs(v)>=1000? Math.round(v/1000)+'k' : Math.round(v));
+    label.textContent = (Math.abs(v)>=10000? Math.round(v/1000)+'k' : Math.round(v).toLocaleString('ru-RU'));
     svg.appendChild(label);
   }
 
@@ -400,8 +429,12 @@ function makeChart(container, slice, series, opts){
   const mainEnd = liveIdx>=0 ? liveIdx-1 : n-1;
   series.forEach(s=>{
     let d = '';
+    let drawing = false;
     for (let i=0; i<=mainEnd; i++){
-      d += `${i===0?'M':'L'}${x(i).toFixed(1)},${y(slice[i][s.key]).toFixed(1)} `;
+      const v = slice[i][s.key];
+      if (v == null){ drawing = false; continue; }
+      d += `${!drawing?'M':'L'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
+      drawing = true;
     }
     const path = document.createElementNS(svgns,'path');
     path.setAttribute('d', d.trim());
@@ -411,9 +444,11 @@ function makeChart(container, slice, series, opts){
     path.setAttribute('stroke-linejoin','round');
     svg.appendChild(path);
 
-    if (liveIdx>=0 && mainEnd>=0){
+    const liveVal = liveIdx>=0 ? slice[liveIdx][s.key] : null;
+    const mainVal = mainEnd>=0 ? slice[mainEnd][s.key] : null;
+    if (liveIdx>=0 && mainEnd>=0 && liveVal != null && mainVal != null){
       const path2 = document.createElementNS(svgns,'path');
-      path2.setAttribute('d', `M${x(mainEnd).toFixed(1)},${y(slice[mainEnd][s.key]).toFixed(1)} L${x(liveIdx).toFixed(1)},${y(slice[liveIdx][s.key]).toFixed(1)}`);
+      path2.setAttribute('d', `M${x(mainEnd).toFixed(1)},${y(mainVal).toFixed(1)} L${x(liveIdx).toFixed(1)},${y(liveVal).toFixed(1)}`);
       path2.setAttribute('fill','none');
       path2.setAttribute('stroke', s.color);
       path2.setAttribute('stroke-width','2');
@@ -421,7 +456,7 @@ function makeChart(container, slice, series, opts){
       svg.appendChild(path2);
 
       const marker = document.createElementNS(svgns,'circle');
-      marker.setAttribute('cx', x(liveIdx)); marker.setAttribute('cy', y(slice[liveIdx][s.key]));
+      marker.setAttribute('cx', x(liveIdx)); marker.setAttribute('cy', y(liveVal));
       marker.setAttribute('r','4');
       marker.setAttribute('fill', s.color);
       marker.setAttribute('stroke', 'var(--surface-1)');
@@ -479,7 +514,9 @@ function makeChart(container, slice, series, opts){
     crosshair.setAttribute('x1', x(i)); crosshair.setAttribute('x2', x(i));
     crosshair.setAttribute('opacity','1');
     dots.forEach((dot,k)=>{
-      dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(row[series[k].key]));
+      const v = row[series[k].key];
+      if (v == null){ dot.setAttribute('opacity','0'); return; }
+      dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(v));
       dot.setAttribute('opacity','1');
     });
     tooltip.innerHTML = '';
@@ -490,7 +527,9 @@ function makeChart(container, slice, series, opts){
       const r = document.createElement('div'); r.className='row';
       const key = document.createElement('span'); key.className='key'; key.style.background = s.color;
       const name = document.createElement('span'); name.textContent = s.label;
-      const val = document.createElement('b'); val.textContent = (row[s.key]>0&&opts.symmetric?'+':'') + fmtInt(row[s.key]);
+      const v = row[s.key];
+      const val = document.createElement('b');
+      val.textContent = v == null ? '—' : (v>0&&opts.symmetric?'+':'') + fmtInt(v);
       r.appendChild(key); r.appendChild(name); r.appendChild(val);
       tooltip.appendChild(r);
     });
@@ -511,14 +550,17 @@ function makeChart(container, slice, series, opts){
 
 function renderCharts(){
   const slice = chartSlice();
-  makeChart(document.getElementById('chart1box'), slice, [
-    {key:'yurTotal', color:'var(--series-inst)'.trim() ? getVar('--series-inst') : '#2a78d6', label:'Институционалы'},
-    {key:'fizTotal', color: getVar('--series-retail'), label:'Частные инвесторы'},
-  ], {symmetric:false});
   makeChart(document.getElementById('chart2box'), slice, [
     {key:'yurNet', color: getVar('--series-inst'), label:'Институционалы'},
     {key:'fizNet', color: getVar('--series-retail'), label:'Частные инвесторы'},
   ], {symmetric:true});
+  makeChart(document.getElementById('chart0box'), slice, [
+    {key:'price', color: getVar('--text-muted'), label:'Индекс МосБиржи (IMOEX)'},
+  ], {symmetric:false});
+  makeChart(document.getElementById('chart1box'), slice, [
+    {key:'yurTotal', color:'var(--series-inst)'.trim() ? getVar('--series-inst') : '#2a78d6', label:'Институционалы'},
+    {key:'fizTotal', color: getVar('--series-retail'), label:'Частные инвесторы'},
+  ], {symmetric:false});
 }
 function getVar(name){
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
