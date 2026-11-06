@@ -1,4 +1,4 @@
-name: Update MX dashboard
+name: Update OI dashboard (MX, IMOEXF, CR, Si, BR, RI, SR)
 
 on:
   schedule:
@@ -35,13 +35,13 @@ jobs:
       - name: Fetch data and rebuild dashboard
         env:
           MOEX_TOKEN: ${{ secrets.MOEX_TOKEN }}
-        run: python scripts/update_dashboard.py
+        run: python update_dashboard.py
 
       - name: Commit and push if changed
         run: |
-          git config user.name "mx-dashboard-bot"
+          git config user.name "oi-dashboard-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add index.html data/data.json data/futoi_MX_live.csv data/price_daily.json
+          git add index.html data/
           if git diff --cached --quiet; then
             echo "Нет изменений."
           else
