@@ -1,6 +1,6 @@
 <!doctype html>
 <meta name="robots" content="noindex, nofollow, noarchive">
-<title>MX: открытый интерес</title>
+<title>IMOEXF: открытый интерес</title>
 <style>
   :root{
     color-scheme: light;
@@ -121,8 +121,11 @@
 <body>
 <div class="wrap">
   <div class="breadcrumb">Инвестпривет · Позиционирование</div>
+  <div class="filters" style="margin-bottom:10px">
+    <div class="chips" id="instrumentChips"></div>
+  </div>
   <div class="header-row">
-    <h1>MX — открытый интерес</h1>
+    <h1 id="pageTitle">Открытый интерес</h1>
     <span class="status-pill" id="statusPill"><i class="dot"></i><span id="statusText">снимок</span></span>
   </div>
   <p class="sub" id="subhead">MOEX AlgoPack · FUTOI</p>
@@ -148,6 +151,16 @@
   </div>
   <p class="strategy-note">Логика дашборда: розничные инвесторы (физлица) чаще ошибаются в направлении, поэтому решения ориентируются на то, как позиционируются юрлица.</p>
 
+  <div class="card">
+    <p class="chart-title">Тренд ОИ в течение дня</p>
+    <p class="chart-desc">Направленная позиция (long − short) по 5-минутным точкам сегодняшнего дня. Только сегодня — завтра график начнётся заново</p>
+    <div class="legend">
+      <span><i style="background:var(--series-inst)"></i>Институционалы</span>
+      <span><i style="background:var(--series-retail)"></i>Частные инвесторы</span>
+    </div>
+    <div class="chart-box" id="chartIntradayBox"></div>
+  </div>
+
   <p class="section-title">Исторические графики</p>
   <div class="filters">
     <div class="chips" id="rangeChips"></div>
@@ -164,8 +177,8 @@
   </div>
 
   <div class="card">
-    <p class="chart-title">Индекс МосБиржи (IMOEX)</p>
-    <p class="chart-desc">Закрытие дня; сегодняшняя точка — текущее значение индекса, обновляется вместе с остальным дашбордом</p>
+    <p class="chart-title" id="priceChartTitle">Цена</p>
+    <p class="chart-desc">Закрытие дня; сегодняшняя точка — текущее значение, обновляется вместе с остальным дашбордом</p>
     <div class="chart-box" id="chart0box"></div>
   </div>
 
@@ -207,38 +220,17 @@
     <a class="btn-link" href="https://investprivet.ru/pl/teach/control/lesson/view?id=343842201&editMode=0" target="_blank" rel="noopener">Смотреть урок «Действуй как инсайдер»</a>
   </div>
 
-  <footer>
-    Источник: MOEX AlgoPack, эндпойнт FUTOI (открытый интерес по срочному рынку), тикер MX.
-    Снимок собран __SNAPSHOT_DATE__, покрывает торговые дни с __MIN_DATE__ по __MAX_DATE__.
-    Плоские участки конца февраля – марта 2022 отражают приостановку торгов на срочном рынке Мосбиржи, а не пропуск в данных.
-    Для новых дней дашборд нужно пересобрать по свежей выгрузке.
+  <footer id="footerText">
+    Источник: MOEX AlgoPack, эндпойнт FUTOI (открытый интерес по срочному рынку). Обновляется автоматически, обычно раз в 5–15 минут.
   </footer>
 </div>
 
 <script>
-const RAW = __DATA_JSON__;
-const LAST_POINT = __LAST_POINT_JSON__;
-const PRICE_RAW = __PRICE_JSON__; // [[date, close], ...] — индекс IMOEX, закрытие дня
+// Единый пакет данных по всем инструментам: { TICKER: {label, priceLabel,
+// footerNote, data, lastPoint, price, intraday}, ... }
+const BUNDLE = __BUNDLE_JSON__;
+const TICKER_ORDER = ['MX','IMOEXF','CR','Si','BR','RI','SR'].filter(k => BUNDLE[k]);
 const THRESHOLD = 10000;
-const PRICE_MAP = new Map(PRICE_RAW.map(([d,c]) => [d,c]));
-// [tradedate, oi_fiz_long, oi_fiz_short, net_fiz, oi_yur_long, oi_yur_short, net_yur]
-const DATA = RAW.map((r, i) => {
-  const prev = RAW[i-1];
-  return {
-    date: r[0],
-    fizLong: r[1], fizShort: r[2], fizNet: r[3],
-    yurLong: r[4], yurShort: r[5], yurNet: r[6],
-    fizTotal: r[1] + r[2],
-    yurTotal: r[4] + r[5],
-    fizNetDelta: prev ? r[3] - prev[3] : null,
-    yurNetDelta: prev ? r[6] - prev[6] : null,
-    price: PRICE_MAP.has(r[0]) ? PRICE_MAP.get(r[0]) : null,
-  };
-});
-// текущее значение индекса: если сегодняшний живой опрос уже дал число — берём его,
-// иначе (например, самый первый запуск после установки) — последнее известное закрытие
-const LAST_PRICE = (LAST_POINT.price != null) ? LAST_POINT.price
-  : (PRICE_RAW.length ? PRICE_RAW[PRICE_RAW.length-1][1] : null);
 
 const RANGES = [
   {key:'1W', label:'1Н', days:5},
@@ -249,6 +241,77 @@ const RANGES = [
   {key:'MAX', label:'MAX', days:Infinity},
 ];
 let currentRangeKey = '1Y';
+let currentTicker = TICKER_ORDER[0];
+let changesDatesShown = 20;
+
+// Пересчитываются при каждом переключении инструмента (loadTicker).
+let RAW, LAST_POINT, PRICE_RAW, PRICE_MAP, DATA, LAST_PRICE, INTRADAY_RAW, INTRADAY, TODAY_ROW;
+
+function loadTicker(key){
+  const b = BUNDLE[key];
+  currentTicker = key;
+  RAW = b.data;
+  LAST_POINT = b.lastPoint;
+  PRICE_RAW = b.price;
+  PRICE_MAP = new Map(PRICE_RAW.map(([d,c]) => [d,c]));
+  // [tradedate, oi_fiz_long, oi_fiz_short, net_fiz, oi_yur_long, oi_yur_short, net_yur]
+  DATA = RAW.map((r, i) => {
+    const prev = RAW[i-1];
+    return {
+      date: r[0],
+      fizLong: r[1], fizShort: r[2], fizNet: r[3],
+      yurLong: r[4], yurShort: r[5], yurNet: r[6],
+      fizTotal: r[1] + r[2],
+      yurTotal: r[4] + r[5],
+      fizNetDelta: prev ? r[3] - prev[3] : null,
+      yurNetDelta: prev ? r[6] - prev[6] : null,
+      price: PRICE_MAP.has(r[0]) ? PRICE_MAP.get(r[0]) : null,
+    };
+  });
+  // текущая цена: если сегодняшний живой опрос уже дал число — берём его,
+  // иначе (например, самый первый запуск после установки) — последнее известное закрытие
+  LAST_PRICE = (LAST_POINT.price != null) ? LAST_POINT.price
+    : (PRICE_RAW.length ? PRICE_RAW[PRICE_RAW.length-1][1] : null);
+
+  // Внутридневной ряд: [[tradetime, net_fiz, net_yur], ...] — только за сегодня,
+  // не хранится отдельно, пересчитывается с нуля при каждой пересборке страницы.
+  INTRADAY_RAW = b.intraday;
+  INTRADAY = INTRADAY_RAW.map(([t, fizNet, yurNet]) => ({ time: t, fizNet, yurNet }));
+
+  TODAY_ROW = (function(){
+    const f = LAST_POINT.groups.FIZ, y = LAST_POINT.groups.YUR;
+    return {
+      date: LAST_POINT.tradedate,
+      fizLong: f.long, fizShort: f.short, fizNet: f.net,
+      yurLong: y.long, yurShort: y.short, yurNet: y.net,
+      fizTotal: f.long + f.short, yurTotal: y.long + y.short,
+      isLive: true,
+      price: LAST_PRICE,
+    };
+  })();
+
+  changesDatesShown = 20;
+  document.getElementById('pageTitle').textContent = b.label + ' — открытый интерес';
+  document.getElementById('priceChartTitle').textContent = b.priceLabel;
+  document.getElementById('footerText').textContent = b.footerNote;
+}
+
+function renderInstrumentChips(){
+  const el = document.getElementById('instrumentChips');
+  el.innerHTML = '';
+  TICKER_ORDER.forEach(key=>{
+    const b = document.createElement('button');
+    b.className = 'chip' + (key===currentTicker ? ' active':'');
+    b.textContent = key;
+    b.title = BUNDLE[key].label;
+    b.addEventListener('click', ()=>{
+      if (key === currentTicker) return;
+      loadTicker(key);
+      renderAll();
+    });
+    el.appendChild(b);
+  });
+}
 
 function fmtInt(n){ return Math.round(n).toLocaleString('ru-RU'); }
 function fmtSigned(n){ const s = Math.round(n).toLocaleString('ru-RU'); return n>0?'+'+s:s; }
@@ -267,18 +330,6 @@ function currentSlice(){
   if (r.days === Infinity) return DATA;
   return DATA.slice(Math.max(0, DATA.length - r.days));
 }
-
-const TODAY_ROW = (function(){
-  const f = LAST_POINT.groups.FIZ, y = LAST_POINT.groups.YUR;
-  return {
-    date: LAST_POINT.tradedate,
-    fizLong: f.long, fizShort: f.short, fizNet: f.net,
-    yurLong: y.long, yurShort: y.short, yurNet: y.net,
-    fizTotal: f.long + f.short, yurTotal: y.long + y.short,
-    isLive: true,
-    price: LAST_PRICE,
-  };
-})();
 
 function chartSlice(){
   return [...currentSlice(), TODAY_ROW];
@@ -548,6 +599,176 @@ function makeChart(container, slice, series, opts){
   svg.addEventListener('pointerleave', onLeave);
 }
 
+function fmtTimeShort(t){ return String(t).slice(0,5); }
+
+function makeIntradayChart(container, series){
+  container.innerHTML = '';
+  const width = 900, height = 220, margin = {top:10,right:14,bottom:24,left:56};
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+  const n = INTRADAY.length;
+
+  if (n < 2){
+    container.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text-muted)">Пока нет точек за сегодня — график появится по ходу торгового дня</div>';
+    return;
+  }
+
+  let vals = [];
+  series.forEach(s => INTRADAY.forEach(d => { if (d[s.key] != null) vals.push(d[s.key]); }));
+  if (!vals.length){
+    container.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--text-muted)">Нет данных за сегодня</div>';
+    return;
+  }
+  const m = Math.max(...vals.map(Math.abs)) * 1.1 || 1;
+  const yMin = -m, yMax = m;
+
+  const x = i => margin.left + (n<=1 ? 0 : i/(n-1)*innerW);
+  const y = v => margin.top + innerH - (v-yMin)/(yMax-yMin)*innerH;
+
+  const svgns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgns,'svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  const gridCount = 4;
+  for (let g=0; g<=gridCount; g++){
+    const v = yMin + (yMax-yMin)*g/gridCount;
+    const gy = y(v);
+    const line = document.createElementNS(svgns,'line');
+    line.setAttribute('x1', margin.left); line.setAttribute('x2', width-margin.right);
+    line.setAttribute('y1', gy); line.setAttribute('y2', gy);
+    line.setAttribute('stroke', 'var(--grid)'); line.setAttribute('stroke-width', '1');
+    svg.appendChild(line);
+    const label = document.createElementNS(svgns,'text');
+    label.setAttribute('x', margin.left-8); label.setAttribute('y', gy+3);
+    label.setAttribute('text-anchor','end'); label.setAttribute('font-size','10');
+    label.setAttribute('fill','var(--text-muted)');
+    label.textContent = (Math.abs(v)>=10000? Math.round(v/1000)+'k' : Math.round(v).toLocaleString('ru-RU'));
+    svg.appendChild(label);
+  }
+
+  const zy = y(0);
+  const zline = document.createElementNS(svgns,'line');
+  zline.setAttribute('class','zero-line');
+  zline.setAttribute('x1', margin.left); zline.setAttribute('x2', width-margin.right);
+  zline.setAttribute('y1', zy); zline.setAttribute('y2', zy);
+  svg.appendChild(zline);
+
+  [0, Math.floor((n-1)/2), n-1].forEach(i=>{
+    if (i<0 || i>=n) return;
+    const label = document.createElementNS(svgns,'text');
+    label.setAttribute('x', x(i)); label.setAttribute('y', height-6);
+    label.setAttribute('text-anchor', i===0?'start':(i===n-1?'end':'middle'));
+    label.setAttribute('font-size','10'); label.setAttribute('fill','var(--text-muted)');
+    label.textContent = fmtTimeShort(INTRADAY[i].time);
+    svg.appendChild(label);
+  });
+
+  series.forEach(s=>{
+    let d = '';
+    let drawing = false;
+    for (let i=0; i<n; i++){
+      const v = INTRADAY[i][s.key];
+      if (v == null){ drawing = false; continue; }
+      d += `${!drawing?'M':'L'}${x(i).toFixed(1)},${y(v).toFixed(1)} `;
+      drawing = true;
+    }
+    const path = document.createElementNS(svgns,'path');
+    path.setAttribute('d', d.trim());
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke', s.color);
+    path.setAttribute('stroke-width','2');
+    path.setAttribute('stroke-linejoin','round');
+    svg.appendChild(path);
+
+    const lastV = INTRADAY[n-1][s.key];
+    if (lastV != null){
+      const marker = document.createElementNS(svgns,'circle');
+      marker.setAttribute('cx', x(n-1)); marker.setAttribute('cy', y(lastV));
+      marker.setAttribute('r','4');
+      marker.setAttribute('fill', s.color);
+      marker.setAttribute('stroke', 'var(--surface-1)');
+      marker.setAttribute('stroke-width','1.5');
+      svg.appendChild(marker);
+    }
+  });
+
+  const crosshair = document.createElementNS(svgns,'line');
+  crosshair.setAttribute('class','crosshair');
+  crosshair.setAttribute('y1', margin.top); crosshair.setAttribute('y2', margin.top+innerH);
+  crosshair.setAttribute('opacity','0');
+  svg.appendChild(crosshair);
+
+  const dots = series.map(s=>{
+    const c = document.createElementNS(svgns,'circle');
+    c.setAttribute('r','3.5'); c.setAttribute('fill', s.color);
+    c.setAttribute('stroke', 'var(--surface-1)'); c.setAttribute('stroke-width','1.5');
+    c.setAttribute('opacity','0');
+    svg.appendChild(c);
+    return c;
+  });
+
+  container.appendChild(svg);
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tooltip';
+  container.style.position = 'relative';
+  container.appendChild(tooltip);
+
+  const hitRect = document.createElementNS(svgns,'rect');
+  hitRect.setAttribute('x', margin.left); hitRect.setAttribute('y', margin.top);
+  hitRect.setAttribute('width', innerW); hitRect.setAttribute('height', innerH);
+  hitRect.setAttribute('fill','transparent');
+  svg.appendChild(hitRect);
+
+  function onMove(evt){
+    const rect = svg.getBoundingClientRect();
+    const px = (evt.clientX - rect.left) / rect.width * width;
+    let i = Math.round((px - margin.left) / innerW * (n-1));
+    i = Math.max(0, Math.min(n-1, i));
+    const row = INTRADAY[i];
+    crosshair.setAttribute('x1', x(i)); crosshair.setAttribute('x2', x(i));
+    crosshair.setAttribute('opacity','1');
+    dots.forEach((dot,k)=>{
+      const v = row[series[k].key];
+      if (v == null){ dot.setAttribute('opacity','0'); return; }
+      dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(v));
+      dot.setAttribute('opacity','1');
+    });
+    tooltip.innerHTML = '';
+    const dEl = document.createElement('div'); dEl.className='d';
+    dEl.textContent = fmtTimeShort(row.time) + (i===n-1 ? ' · в моменте (live)' : '');
+    tooltip.appendChild(dEl);
+    series.forEach(s=>{
+      const r = document.createElement('div'); r.className='row';
+      const key = document.createElement('span'); key.className='key'; key.style.background = s.color;
+      const name = document.createElement('span'); name.textContent = s.label;
+      const v = row[s.key];
+      const val = document.createElement('b');
+      val.textContent = v == null ? '—' : (v>0?'+':'') + fmtInt(v);
+      r.appendChild(key); r.appendChild(name); r.appendChild(val);
+      tooltip.appendChild(r);
+    });
+    tooltip.style.opacity = '1';
+    tooltip.style.left = (x(i)/width*100) + '%';
+    tooltip.style.top = '0px';
+    tooltip.style.transform = `translate(${x(i) > width*0.6 ? '-105%' : '10px'}, 0)`;
+  }
+  function onLeave(){
+    crosshair.setAttribute('opacity','0');
+    dots.forEach(d=>d.setAttribute('opacity','0'));
+    tooltip.style.opacity = '0';
+  }
+  svg.addEventListener('pointermove', onMove);
+  svg.addEventListener('pointerleave', onLeave);
+}
+
+function renderIntradayChart(){
+  makeIntradayChart(document.getElementById('chartIntradayBox'), [
+    {key:'yurNet', color: getVar('--series-inst'), label:'Институционалы'},
+    {key:'fizNet', color: getVar('--series-retail'), label:'Частные инвесторы'},
+  ]);
+}
+
 function renderCharts(){
   const slice = chartSlice();
   makeChart(document.getElementById('chart2box'), slice, [
@@ -555,7 +776,7 @@ function renderCharts(){
     {key:'fizNet', color: getVar('--series-retail'), label:'Частные инвесторы'},
   ], {symmetric:true});
   makeChart(document.getElementById('chart0box'), slice, [
-    {key:'price', color: getVar('--text-muted'), label:'Индекс МосБиржи (IMOEX)'},
+    {key:'price', color: getVar('--text-muted'), label: BUNDLE[currentTicker].priceLabel},
   ], {symmetric:false});
   makeChart(document.getElementById('chart1box'), slice, [
     {key:'yurTotal', color:'var(--series-inst)'.trim() ? getVar('--series-inst') : '#2a78d6', label:'Институционалы'},
@@ -565,8 +786,6 @@ function renderCharts(){
 function getVar(name){
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
-
-let changesDatesShown = 20;
 
 function addRow(tbody, r, group, longV, shortV, netV, deltaV, color){
   const tr = document.createElement('tr');
@@ -611,10 +830,14 @@ document.getElementById('moreRows').addEventListener('click', ()=>{
 });
 
 function renderAll(){
+  renderInstrumentChips();
   renderChips();
   renderLastPoint();
+  renderIntradayChart();
   renderCharts();
   renderChangesTable();
+  document.getElementById('subhead').textContent =
+    `MOEX AlgoPack · FUTOI · ${DATA.length.toLocaleString('ru-RU')} торговых дней · ${fmtDateLong(DATA[0].date)} — ${fmtDateLong(DATA[DATA.length-1].date)}`;
 }
 
 document.getElementById('copyCsv').addEventListener('click', async (e)=>{
@@ -635,8 +858,6 @@ document.getElementById('copyCsv').addEventListener('click', async (e)=>{
   }
 });
 
-document.getElementById('subhead').textContent =
-  `MOEX AlgoPack · FUTOI · ${DATA.length.toLocaleString('ru-RU')} торговых дней · ${fmtDateLong(DATA[0].date)} — ${fmtDateLong(DATA[DATA.length-1].date)}`;
-
+loadTicker(currentTicker);
 renderAll();
 </script>
