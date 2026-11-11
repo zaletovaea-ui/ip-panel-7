@@ -142,12 +142,13 @@
       <table class="lp-table">
         <thead><tr>
           <th style="text-align:left">Группа</th><th>Long</th><th>Δ Long</th><th>Short</th><th>Δ Short</th>
-          <th>Направленная позиция</th><th>Δ позиции</th>
+          <th>Направленная позиция</th><th>Δ позиции</th><th>Δ, млн ₽</th>
         </tr></thead>
         <tbody id="lpBody"></tbody>
       </table>
     </div>
     <p class="threshold-note" id="lpFootnote" style="margin-top:10px"></p>
+    <p class="threshold-note" id="lpExposure" style="margin-top:4px"></p>
   </div>
   <p class="strategy-note">Логика дашборда: розничные инвесторы (физлица) чаще ошибаются в направлении, поэтому решения ориентируются на то, как позиционируются юрлица.</p>
 
@@ -203,7 +204,7 @@
       <table>
         <thead><tr>
           <th style="text-align:left">Дата</th><th style="text-align:left">Группа</th>
-          <th>Лонг</th><th>Шорт</th><th>Нетто</th><th>Δ к пред. дню</th>
+          <th>Лонг</th><th>Шорт</th><th>Нетто</th><th>Δ к пред. дню</th><th>Δ, млн ₽</th>
         </tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -230,7 +231,65 @@
 // footerNote, data, lastPoint, price, intraday}, ... }
 const BUNDLE = __BUNDLE_JSON__;
 const TICKER_ORDER = ['MX','IMOEXF','CR','Si','BR','RI','SR'].filter(k => BUNDLE[k]);
-const THRESHOLD = 10000;
+// Порог "заметного изменения" направленной позиции к предыдущему дню — свой для каждого инструмента (контрактов).
+const THRESHOLDS = { MX: 10000, IMOEXF: 100000, CR: 500000, Si: 200000, BR: 60000, RI: 10000, SR: 50000 };
+let THRESHOLD = THRESHOLDS[TICKER_ORDER[0]] ?? 10000;
+
+// Денежная оценка 1 контракта (лота) в рублях, по спецификациям MOEX:
+// MX/IMOEXF — цена в пунктах индекса (1 ₽ / 10 ₽ за пункт соответственно);
+// CR/Si — цена уже в рублях за единицу валюты, лот 1000 ед.;
+// SR — цена за 1 акцию, лот 100 акций;
+// BR (нефть, $/баррель, лот 10) и RI (РТС, $2/пункт) — считаются в долларах,
+// затем переводятся в рубли по курсу USD/RUB из данных тикера Si.
+const MONEY_MULT = { MX: 1, IMOEXF: 10, CR: 1000, Si: 1000, SR: 100, BR: 10, RI: 2 };
+const FX_TICKERS = new Set(['BR', 'RI']);
+
+function fxRateForDate(dateStr){
+  const si = BUNDLE['Si'];
+  if (!si) return null;
+  const map = new Map(si.price);
+  if (map.has(dateStr)) return map.get(dateStr);
+  return si.price.length ? si.price[si.price.length - 1][1] : null;
+}
+function fxRateLive(){
+  const si = BUNDLE['Si'];
+  if (!si) return null;
+  if (si.lastPoint && si.lastPoint.price != null) return si.lastPoint.price;
+  return fxRateForDate(new Date().toISOString().slice(0,10));
+}
+// Денежная стоимость contracts контрактов тикера key по цене price (₽).
+// live=true — конвертировать по текущему курсу USD/RUB, иначе — по курсу на dateStr.
+function moneyValue(contracts, price, key, dateStr, live){
+  if (contracts == null || price == null) return null;
+  let mult = MONEY_MULT[key] ?? 1;
+  if (FX_TICKERS.has(key)){
+    const fx = live ? fxRateLive() : fxRateForDate(dateStr);
+    if (fx == null) return null;
+    mult *= fx;
+  }
+  return contracts * price * mult;
+}
+function fmtMoney(v){
+  if (v == null) return '—';
+  const abs = Math.abs(v);
+  let scaled, suffix;
+  if (abs >= 1e9){ scaled = v/1e9; suffix = ' млрд ₽'; }
+  else if (abs >= 1e6){ scaled = v/1e6; suffix = ' млн ₽'; }
+  else if (abs >= 1e3){ scaled = v/1e3; suffix = ' тыс ₽'; }
+  else { scaled = v; suffix = ' ₽'; }
+  const s = scaled.toLocaleString('ru-RU', {maximumFractionDigits:1});
+  return (scaled > 0 ? '+' : '') + s + suffix;
+}
+function fmtMoneyAbs(v){
+  if (v == null) return '—';
+  const abs = Math.abs(v);
+  let scaled, suffix;
+  if (abs >= 1e9){ scaled = abs/1e9; suffix = ' млрд ₽'; }
+  else if (abs >= 1e6){ scaled = abs/1e6; suffix = ' млн ₽'; }
+  else if (abs >= 1e3){ scaled = abs/1e3; suffix = ' тыс ₽'; }
+  else { scaled = abs; suffix = ' ₽'; }
+  return scaled.toLocaleString('ru-RU', {maximumFractionDigits:1}) + suffix;
+}
 
 const RANGES = [
   {key:'1W', label:'1Н', days:5},
@@ -250,6 +309,7 @@ let RAW, LAST_POINT, PRICE_RAW, PRICE_MAP, DATA, LAST_PRICE, INTRADAY_RAW, INTRA
 function loadTicker(key){
   const b = BUNDLE[key];
   currentTicker = key;
+  THRESHOLD = THRESHOLDS[key] ?? 10000;
   RAW = b.data;
   LAST_POINT = b.lastPoint;
   PRICE_RAW = b.price;
@@ -363,7 +423,7 @@ function renderLastPoint(){
   const prevDay = DATA[DATA.length-1]; // последний закрытый торговый день из бэкфилла
   document.getElementById('lpNote').textContent = `к предыдущему дню (${fmtDateShort(prevDay.date)}) · контрактов`;
   document.getElementById('lpFootnote').textContent =
-    `Направленная позиция = Long − Short. Порог заметного изменения: ±${THRESHOLD.toLocaleString('ru-RU')} контрактов к предыдущему дню.`;
+    `Направленная позиция = Long − Short. Порог заметного изменения: ±${THRESHOLD.toLocaleString('ru-RU')} контрактов к предыдущему дню. Денежная оценка (Δ, млн ₽) — приблизительная, по текущей цене${FX_TICKERS.has(currentTicker) ? ' и текущему курсу USD/RUB' : ''}.`;
   document.getElementById('statusText').textContent =
     `${LAST_POINT.tradedate.split('-').reverse().join('.')} ${LAST_POINT.last_time.slice(0,5)}, live`;
   document.querySelector('#statusPill .dot').style.background = 'var(--delta-up)';
@@ -376,13 +436,23 @@ function renderLastPoint(){
   tbody.innerHTML = rows.map(r=>{
     const g = r.g;
     const dLong = g.long - r.pLong, dShort = g.short - r.pShort, dNet = g.net - r.pNet;
+    const dMoney = moneyValue(dNet, LAST_PRICE, currentTicker, LAST_POINT.tradedate, true);
+    const moneyDir = dMoney > 0 ? 'up' : (dMoney < 0 ? 'down' : '');
     return `<tr>
       <td class="grpcell">${r.label}</td>
       <td>${fmtInt(g.long)}</td>${deltaCell(dLong)}
       <td>${fmtInt(g.short)}</td>${deltaCell(dShort)}
       <td class="grpcell">${fmtSigned(g.net)}</td>${deltaCell(dNet)}
+      <td class="delta ${moneyDir}">${fmtMoney(dMoney)}</td>
     </tr>`;
   }).join('');
+
+  // Сколько сейчас "в деньгах" стоят открытые позиции каждой группы (лонг + шорт, по текущей цене).
+  const fizExposure = moneyValue(rows[0].g.long + rows[0].g.short, LAST_PRICE, currentTicker, LAST_POINT.tradedate, true);
+  const yurExposure = moneyValue(rows[1].g.long + rows[1].g.short, LAST_PRICE, currentTicker, LAST_POINT.tradedate, true);
+  document.getElementById('lpExposure').textContent =
+    (fizExposure == null || yurExposure == null) ? '' :
+    `Сейчас в открытых позициях (лонг + шорт, по текущей цене): физлица ≈ ${fmtMoneyAbs(fizExposure)}, юрлица ≈ ${fmtMoneyAbs(yurExposure)}.`;
 
   // insights
   const fiz = LAST_POINT.groups.FIZ, yur = LAST_POINT.groups.YUR;
@@ -807,6 +877,13 @@ function addRow(tbody, r, group, longV, shortV, netV, deltaV, color){
   deltaTd.className = 'delta ' + (deltaV>0?'up':(deltaV<0?'down':''));
   deltaTd.textContent = deltaV===null ? '—' : fmtSigned(deltaV);
   tr.appendChild(deltaTd);
+
+  const moneyV = deltaV===null ? null : moneyValue(deltaV, r.price, currentTicker, r.date, false);
+  const moneyTd = document.createElement('td');
+  moneyTd.className = 'delta ' + (moneyV>0?'up':(moneyV<0?'down':''));
+  moneyTd.textContent = fmtMoney(moneyV);
+  tr.appendChild(moneyTd);
+
   tbody.appendChild(tr);
 }
 
