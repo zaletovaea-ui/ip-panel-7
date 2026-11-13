@@ -4,35 +4,36 @@
 <style>
   :root{
     color-scheme: light;
-    --surface-1:#fcfcfb; --page:#f9f9f7;
-    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#898781;
-    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
-    --series-inst:#2a78d6; --series-retail:#eb6834;
-    --series-inst-fill:rgba(42,120,214,0.12); --series-retail-fill:rgba(235,104,52,0.12);
-    --chip-bg:#f0efec; --chip-bg-active:#0b0b0b; --chip-fg-active:#fcfcfb;
-    --delta-up:#006300; --delta-down:#d03b3b; --flag-bg:rgba(208,59,59,0.08);
+    --brand-lime:#B6F03A;
+    --surface-1:#FFFFFF; --page:#F8FAFC;
+    --text-primary:#0F2042; --text-secondary:#475569; --text-muted:#64748B;
+    --grid:#E2E8F0; --baseline:#CBD5E1; --border:#E2E8F0;
+    --series-inst:#1F5CFF; --series-retail:#EB6834;
+    --series-inst-fill:rgba(31,92,255,0.12); --series-retail-fill:rgba(235,104,52,0.12);
+    --chip-bg:#EEF2F6; --chip-bg-active:#1F5CFF; --chip-fg-active:#FFFFFF;
+    --delta-up:#15803D; --delta-down:#DC2626; --flag-bg:rgba(220,38,38,0.08);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       color-scheme: dark;
-      --surface-1:#1a1a19; --page:#0d0d0d;
-      --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
-      --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-      --series-inst:#3987e5; --series-retail:#d95926;
-      --series-inst-fill:rgba(57,135,229,0.16); --series-retail-fill:rgba(217,89,38,0.16);
-      --chip-bg:#232320; --chip-bg-active:#ffffff; --chip-fg-active:#0b0b0b;
-      --delta-up:#0ca30c; --delta-down:#e66767; --flag-bg:rgba(230,103,103,0.12);
+      --surface-1:#0F2042; --page:#0B1730;
+      --text-primary:#ffffff; --text-secondary:#CBD5E1; --text-muted:#94A3B8;
+      --grid:#24345C; --baseline:#3A4D7A; --border:rgba(255,255,255,0.12);
+      --series-inst:#1F5CFF; --series-retail:#D95926;
+      --series-inst-fill:rgba(31,92,255,0.18); --series-retail-fill:rgba(217,89,38,0.18);
+      --chip-bg:#17284A; --chip-bg-active:#1F5CFF; --chip-fg-active:#ffffff;
+      --delta-up:#22C55E; --delta-down:#F87171; --flag-bg:rgba(248,113,113,0.14);
     }
   }
   :root[data-theme="dark"]{
     color-scheme: dark;
-    --surface-1:#1a1a19; --page:#0d0d0d;
-    --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#898781;
-    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-    --series-inst:#3987e5; --series-retail:#d95926;
-    --series-inst-fill:rgba(57,135,229,0.16); --series-retail-fill:rgba(217,89,38,0.16);
-    --chip-bg:#232320; --chip-bg-active:#ffffff; --chip-fg-active:#0b0b0b;
-    --delta-up:#0ca30c; --delta-down:#e66767; --flag-bg:rgba(230,103,103,0.12);
+    --surface-1:#0F2042; --page:#0B1730;
+    --text-primary:#ffffff; --text-secondary:#CBD5E1; --text-muted:#94A3B8;
+    --grid:#24345C; --baseline:#3A4D7A; --border:rgba(255,255,255,0.12);
+    --series-inst:#1F5CFF; --series-retail:#D95926;
+    --series-inst-fill:rgba(31,92,255,0.18); --series-retail-fill:rgba(217,89,38,0.18);
+    --chip-bg:#17284A; --chip-bg-active:#1F5CFF; --chip-fg-active:#ffffff;
+    --delta-up:#22C55E; --delta-down:#F87171; --flag-bg:rgba(248,113,113,0.14);
   }
   *{box-sizing:border-box}
   body{margin:0;padding-block:24px;background:var(--page);color:var(--text-primary);
@@ -107,14 +108,14 @@
   .lp-note{font-size:12px;color:var(--text-muted)}
   .insights{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
   .insight{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border-radius:8px;font-size:13px;line-height:1.4}
-  .insight.info{background:rgba(42,120,214,0.08);color:var(--text-primary)}
+  .insight.info{background:rgba(31,92,255,0.08);color:var(--text-primary)}
   .insight.warn{background:var(--flag-bg);color:var(--text-primary)}
   .insight .ic{flex:none}
   .lp-table th{text-align:right} .lp-table th:first-child{text-align:left}
   .lp-table td.grpcell{font-weight:600}
   .strategy-note{font-size:12px;color:var(--text-muted);font-style:italic;margin-top:12px}
   .learn-links{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 20px}
-  .btn-link{display:inline-block;background:var(--series-inst);color:#ffffff;
+  .btn-link{display:inline-block;background:var(--brand-lime);color:#0F2042;
             border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;
             text-decoration:none;font-family:inherit}
 </style>
@@ -864,7 +865,7 @@ function renderCharts(){
     {key:'price', color: getVar('--text-muted'), label: BUNDLE[currentTicker].priceLabel},
   ], {symmetric:false});
   makeChart(document.getElementById('chart1box'), slice, [
-    {key:'yurTotal', color:'var(--series-inst)'.trim() ? getVar('--series-inst') : '#2a78d6', label:'Институционалы'},
+    {key:'yurTotal', color: getVar('--series-inst'), label:'Институционалы'},
     {key:'fizTotal', color: getVar('--series-retail'), label:'Частные инвесторы'},
   ], {symmetric:false});
 }
